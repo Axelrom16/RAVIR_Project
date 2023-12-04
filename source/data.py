@@ -81,27 +81,25 @@ class RAVIRDataset(Dataset):
 
         segmentation = Image.open(example["segmentation_path_"])
         segmentation = np.array(segmentation).astype(np.uint8)
-        segmentation = ((segmentation / 255) * 2).astype(np.uint8)
+        segmentation = ((segmentation/255) * 2).astype(np.uint8)
 
         if self.size is not None:
             image = self.image_rescaler(image=image)["image"]
 
         if self.shift_segmentation:
             # used to support segmentations containing unlabeled==255 label
-            segmentation = segmentation+1
+            segmentation = segmentation + 1
         if self.size is not None:
             segmentation = self.segmentation_rescaler(image=segmentation)["image"]
         if self.size is not None:
             processed = self.preprocessor(image=image,
-                                          mask=segmentation
-                                          )
+                                          mask=segmentation)
         else:
             processed = {"image": image,
-                         "mask": segmentation
-                         }
+                         "mask": segmentation}
 
         if self.augmentation is not None:
-            processed = self.augmentation(image=processed['image'], mask=processed['mask'])       
+            processed = self.augmentation(image=processed['image'], mask=processed['mask']) 
 
         example["image"] = (processed["image"]/255).astype(np.float32)
 
@@ -120,11 +118,10 @@ class RAVIRDataset(Dataset):
 
 
 
-
 if __name__ == '__main__':
     data = RAVIRDataset(
-        data_root='/Volumes/Axel/Master/3rd Semester/DLMIA/RAVIR_Project/data/train/training_images',
-        segmentation_root='/Volumes/Axel/Master/3rd Semester/DLMIA/RAVIR_Project/data/train/training_masks',
+        data_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_images',
+        segmentation_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_masks',
         size=256,
         random_crop=False,
         interpolation="bicubic",
@@ -133,10 +130,20 @@ if __name__ == '__main__':
         augmentation=True
     )
 
-    print(data[0]['image'].shape)
-    print(data[0]['mask'].shape)
+    ex = data[0]
+    image = ex['image']
+    mask = ex['mask']
+    segmentation = ex['segmentation']
+    print(image.shape)
+    print(mask.shape)
+    print(segmentation.shape)
 
-    plt.imshow(data[0]['image'])
+    plt.imshow(image)
+    plt.axis('off')
     plt.show()
-    plt.imshow(data[0]['mask'], cmap='gray')
+    plt.imshow(mask, cmap='gray')
+    plt.axis('off')
+    plt.show()
+    plt.imshow(segmentation)
+    plt.axis('off')
     plt.show()
