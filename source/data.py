@@ -103,7 +103,7 @@ class RAVIRDataset(Dataset):
 
         example["image"] = (processed["image"]/255).astype(np.float32)
 
-        example["mask"] = np.expand_dims(processed["mask"], -1)
+        example["mask"] = np.expand_dims(processed["mask"], -1).astype(np.int64)
 
         segmentation = processed["mask"]
         onehot = np.eye(self.n_labels)[segmentation].astype(np.float32)
@@ -116,34 +116,3 @@ class RAVIRDataset(Dataset):
 
         return example
 
-
-
-if __name__ == '__main__':
-    data = RAVIRDataset(
-        data_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_images',
-        segmentation_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_masks',
-        size=256,
-        random_crop=False,
-        interpolation="bicubic",
-        n_labels=3,
-        shift_segmentation=False,
-        augmentation=True
-    )
-
-    ex = data[0]
-    image = ex['image']
-    mask = ex['mask']
-    segmentation = ex['segmentation']
-    print(image.shape)
-    print(mask.shape)
-    print(segmentation.shape)
-
-    plt.imshow(image)
-    plt.axis('off')
-    plt.show()
-    plt.imshow(mask, cmap='gray')
-    plt.axis('off')
-    plt.show()
-    plt.imshow(segmentation)
-    plt.axis('off')
-    plt.show()

@@ -125,34 +125,30 @@ class SegRAVIRModel(nn.Module):
                 j += 1
             x = layers(x)
             i += 1
-        
 
-"""
-if __name__ == '__main__':
-    model = SegRAVIRModel()
-    print(model)
+        return x
 
-    #model_graph = draw_graph(model, input_size=(1,3,256,256), expand_nested=True)
-    #model_graph.visual_graph
 
-    dataset_train = RAVIRDataset(
-        data_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_images',
-        segmentation_root='/media/axelrom16/HDD/AI/RAVIR_Project/data/train/training_masks',
-        size=256,
-        random_crop=False,
-        interpolation="bicubic",
-        n_labels=3,
-        shift_segmentation=False,
-        augmentation=True
-    )
-    train_dataloader = DataLoader(dataset_train, batch_size=8, shuffle=True)
-    batch = next(iter(train_dataloader))
-    yhat = model(batch["image"].permute(0, 3, 1, 2)) 
-    make_dot(yhat).render("rnn_torchviz", format="png")
-    # x = torch.randn((1, 3, 256, 256))
-    # y = model(x)
-    # print(y.shape)
+class Loss_Dice_CE(nn.Module):
+    def __init__(self, weight_dice=0.5):
+        super(Loss_Dice_CE, self).__init__()
+        self.weight_dice = weight_dice
 
-    # dot = make_dot(y, params=dict(model.named_parameters()))
-    # dot.render('model', format='png')
-"""
+    def forward(self, logits, targets):
+        # Dice coefficient loss
+        dice_loss = self.dice_coefficient_loss(logits, targets)
+
+        # Cross-entropy loss
+        ce_loss = F.cross_entropy(logits, targets)
+
+        # Combine the two losses using the specified weight
+        combined_loss = self.weight_dice * dice_loss + (1 - self.weight_dice) * ce_loss
+
+        return combined_loss
+
+    def dice_coefficient_loss(self, logits, targets, smooth=1e-5):
+        intersection = torch.sum(logits * targets)
+        union = torch.sum(logits) + torch.sum(targets)
+        dice_coefficient = (2.0 * intersection + smooth) / (union + smooth)
+        dice_loss = 1.0 - dice_coefficient
+        return dice_loss
