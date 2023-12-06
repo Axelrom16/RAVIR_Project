@@ -15,13 +15,14 @@ import cv2
     
 class RAVIRDataset(Dataset):
     def __init__(self,
-                 data_root, segmentation_root,
-                 size=None, random_crop=False, interpolation="bicubic",
-                 n_labels=1, shift_segmentation=False,
-                 augmentation=False,
+                 data_root,
+                 segmentation_root,
+                 size=None,
+                 interpolation="bicubic",
+                 n_labels=1
                  ):
+        
         self.n_labels = n_labels
-        self.shift_segmentation = shift_segmentation
         self.data_root = data_root
         self.segmentation_root = segmentation_root
         
@@ -41,15 +42,6 @@ class RAVIRDataset(Dataset):
         size = None if size is not None and size<=0 else size
         self.size = size
 
-        if augmentation:
-            self.augmentation = albumentations.OneOf(
-                    [albumentations.VerticalFlip(p=0.25),
-                    albumentations.HorizontalFlip(p=0.25),
-                     albumentations.RandomRotate90(p=0.25)
-                    ])
-        else:
-            self.augmentation = None
-
         if self.size is not None:
             self.interpolation = interpolation
             self.interpolation = {
@@ -62,12 +54,6 @@ class RAVIRDataset(Dataset):
                                                                  interpolation=self.interpolation)
             self.segmentation_rescaler = albumentations.SmallestMaxSize(max_size=self.size,
                                                                         interpolation=cv2.INTER_NEAREST)
-            self.center_crop = not random_crop
-            if self.center_crop:
-                self.cropper = albumentations.CenterCrop(height=self.size, width=self.size)
-            else:
-                self.cropper = albumentations.RandomCrop(height=self.size, width=self.size)
-            self.preprocessor = self.cropper
 
     def __len__(self):
         return self._length
@@ -81,29 +67,20 @@ class RAVIRDataset(Dataset):
 
         segmentation = Image.open(example["segmentation_path_"])
         segmentation = np.array(segmentation).astype(np.uint8)
-        segmentation = ((segmentation/255) * 2).astype(np.uint8)
+        #segmentation = ((segmentation/255) * 2).astype(np.uint8)
 
         if self.size is not None:
             image = self.image_rescaler(image=image)["image"]
-
-        if self.shift_segmentation:
-            # used to support segmentations containing unlabeled==255 label
-            segmentation = segmentation + 1
-        if self.size is not None:
             segmentation = self.segmentation_rescaler(image=segmentation)["image"]
-        if self.size is not None:
-            processed = self.preprocessor(image=image,
-                                          mask=segmentation)
+            processed = {"image": image,
+                         "mask": segmentation}
         else:
             processed = {"image": image,
                          "mask": segmentation}
 
-        if self.augmentation is not None:
-            processed = self.augmentation(image=processed['image'], mask=processed['mask']) 
-
         example["image"] = (processed["image"]/255).astype(np.float32)
 
-        example["mask"] = np.expand_dims(processed["mask"], -1).astype(np.int64)
+        example["mask"] = np.expand_dims(processed["mask"], -1).astype(np.uint8)
 
         segmentation = processed["mask"]
         onehot = np.eye(self.n_labels)[segmentation].astype(np.float32)
