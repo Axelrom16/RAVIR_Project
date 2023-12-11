@@ -34,22 +34,32 @@ class RAVIRDataset(Dataset):
         self.image_ids = [l.split('.')[0] for l in self.image_ids]
              
         self._length = len(self.image_ids)
-        self.labels = {
-            "image_name": self.image_ids,
-            "relative_file_path_": [l+'.png' for l in self.image_ids],
-            "file_path_": [os.path.join(self.data_root, l+'.png')
-                           for l in self.image_ids],
-            "segmentation_path_": [os.path.join(self.segmentation_root, l+'.png')
-                                   for l in self.image_ids]
-        }
+
+        if self.segmentation_root is None:
+            self.labels = {
+                "image_name": self.image_ids,
+                "relative_file_path_": [l+'.png' for l in self.image_ids],
+                "file_path_": [os.path.join(self.data_root, l+'.png')
+                            for l in self.image_ids]
+            }
+        else:
+            self.labels = {
+                "image_name": self.image_ids,
+                "relative_file_path_": [l+'.png' for l in self.image_ids],
+                "file_path_": [os.path.join(self.data_root, l+'.png')
+                            for l in self.image_ids],
+                "segmentation_path_": [os.path.join(self.segmentation_root, l+'.png')
+                                    for l in self.image_ids]
+            }
 
         if augmentation:
             self.augmentation = albumentations.OneOf(
                     [albumentations.VerticalFlip(p=1),
                      albumentations.HorizontalFlip(p=1),
-                     albumentations.Perspective(p=1, scale=(0.1, 0.3)),
-                     albumentations.OpticalDistortion(p=1, distort_limit=0.75, shift_limit=0.5),
-                     albumentations.Affine(p=1, scale=(0.75, 1.25), shear=15)
+                     albumentations.Perspective(p=1, scale=(0.05, 0.1)),
+                     #albumentations.OpticalDistortion(p=1, distort_limit=0.4, shift_limit=0.5),
+                     albumentations.Affine(p=1, scale=(0.75, 1.25), shear=15),
+                     albumentations.PiecewiseAffine(p=1, scale=(0.03, 0.05))
                     ])
         else:
             self.augmentation = None
@@ -78,33 +88,46 @@ class RAVIRDataset(Dataset):
         image = Image.open(example["file_path_"])
         if not image.mode == "RGB":
             image = image.convert("RGB")
-
-        segmentation = Image.open(example["segmentation_path_"])
-
         image = np.array(image).astype(np.uint8)
-        segmentation = np.array(segmentation).astype(np.uint8)
-        segmentation = np.expand_dims(segmentation, -1)
+
+        if self.segmentation_root is None:
+            segmentation = None
+        else:
+            segmentation = Image.open(example["segmentation_path_"])
+            segmentation = np.array(segmentation).astype(np.uint8)
+            segmentation = np.expand_dims(segmentation, -1)
 
         if self.size is not None:
             image = self.image_rescaler(image=image)["image"]
-            segmentation = self.segmentation_rescaler(image=segmentation)["image"]
-            processed = {"image": image,
-                         "mask": segmentation}
+            if segmentation is not None:
+                segmentation = self.segmentation_rescaler(image=segmentation)["image"]
+                processed = {"image": image,
+                            "mask": segmentation}
+            else:
+                processed = {"image": image}
         else:
-            processed = {"image": image,
-                         "mask": segmentation}
+            if segmentation is not None:
+                processed = {"image": image,
+                            "mask": segmentation}
+            else:    
+                processed = {"image": image}
 
         if self.augmentation is not None:
-            processed = self.augmentation(image=processed['image'], mask=processed['mask']) 
+            if segmentation is not None:
+                processed = self.augmentation(image=processed['image'], mask=processed['mask'])
+            else:  
+                processed = self.augmentation(image=processed['image'])
         
         example["image"] = (processed["image"]/255).astype(np.float32)
-        example["mask"] = ((processed["mask"]/255)*2).astype(np.uint8)
+        example["image"] = torch.from_numpy(example["image"])
 
+        if segmentation is None:
+            return example
+        
+        example["mask"] = ((processed["mask"]/255)*2).astype(np.uint8)
         segmentation = example["mask"]
         onehot = np.eye(self.n_labels)[segmentation].astype(np.float32)
         example["segmentation"] = onehot[..., 0, :]
-
-        example["image"] = torch.from_numpy(example["image"])
         example["mask"] = torch.from_numpy(example["mask"])
         example["segmentation"] = torch.from_numpy(example["segmentation"])
 
