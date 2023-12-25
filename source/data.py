@@ -15,6 +15,68 @@ import cv2
 import random
 
 
+def increase_contrast(image, alpha=1.5, beta=0):
+    """
+    Apply contrast enhancement to the input image.
+
+    Parameters:
+        image (numpy.ndarray): Input image.
+        alpha (float): Contrast control (1.0 means no change).
+        beta (float): Brightness control.
+
+    Returns:
+        numpy.ndarray: Image with increased contrast.
+    """
+    enhanced_image = np.clip(alpha * image + beta, 0, 255).astype(np.uint8)
+    return enhanced_image
+
+
+def apply_histogram_equalization(image):
+    """
+    Apply histogram equalization to the input image.
+
+    Parameters:
+        image (numpy.ndarray): Input image.
+
+    Returns:
+        numpy.ndarray: Image with histogram equalization applied.
+    """
+
+    # Convert the image to grayscale if it's a color image
+    if len(image.shape) == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    
+    # Ensure that the image is of type CV_8UC1 (8-bit unsigned single-channel)
+    if image.dtype != np.uint8:
+        image = np.clip(image, 0, 255).astype(np.uint8)
+
+    # Apply adaptive histogram equalization (CLAHE)
+    equalized_image = cv2.equalizeHist(image)
+
+    return equalized_image
+
+
+class ContrastEnhancementTransform(object):
+    def __init__(self, alpha=1.5, beta=0):
+        self.alpha = alpha
+        self.beta = beta
+
+    def __call__(self, sample):
+        # Assume sample is a PIL Image, you may need to adjust accordingly
+        enhanced_image = increase_contrast(np.array(sample), alpha=self.alpha, beta=self.beta)
+        return enhanced_image
+
+
+class HistogramEqualizationTransform(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, sample):
+        # Assume sample is a PIL Image, you may need to adjust accordingly
+        enhanced_image = apply_histogram_equalization(np.array(sample))
+        return enhanced_image
+    
+
 class RAVIRDataset(Dataset):
     def __init__(self,
                  data_root,
@@ -23,12 +85,14 @@ class RAVIRDataset(Dataset):
                  interpolation="bicubic",
                  n_labels=1,
                  augmentation=False,
+                 contrast_enhancement=False,
                  ):
         
         self.n_labels = n_labels
         self.data_root = data_root
         self.segmentation_root = segmentation_root
         self.augmentation = augmentation    
+        self.contrast_enhancement = contrast_enhancement
         
         self.image_ids = os.listdir(self.data_root)
         self.image_ids = [l.split('.')[0] for l in self.image_ids]
@@ -57,12 +121,13 @@ class RAVIRDataset(Dataset):
                     [albumentations.VerticalFlip(p=1),
                      albumentations.HorizontalFlip(p=1),
                      albumentations.Perspective(p=1, scale=(0.05, 0.1)),
-                     #albumentations.OpticalDistortion(p=1, distort_limit=0.4, shift_limit=0.5),
                      albumentations.Affine(p=1, scale=(0.75, 1.25), shear=15),
                      albumentations.PiecewiseAffine(p=1, scale=(0.03, 0.05))
                     ])
         else:
             self.augmentation = None
+
+        self.contrast_enhancement = HistogramEqualizationTransform() if contrast_enhancement else None
 
         size = None if size is not None and size<=0 else size
         self.size = size
@@ -117,6 +182,13 @@ class RAVIRDataset(Dataset):
                 processed = self.augmentation(image=processed['image'], mask=processed['mask'])
             else:  
                 processed = self.augmentation(image=processed['image'])
+
+        if self.contrast_enhancement is not None:
+            processed['image'] = processed['image'][..., 0] 
+            processed['image'] = processed['image'].astype(np.uint8)
+            equalized_image = self.contrast_enhancement(processed['image'])
+            equalized_image = np.concatenate((equalized_image[..., np.newaxis], equalized_image[..., np.newaxis], equalized_image[..., np.newaxis]), axis=2)
+            processed['image'] = equalized_image
         
         example["image"] = (processed["image"]/255).astype(np.float32)
         example["image"] = torch.from_numpy(example["image"])
